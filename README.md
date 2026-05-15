@@ -34,3 +34,10 @@ Run PowerShell as Administrator:
 
 Some optimizations (e.g. process priority and power throttling)  
 may not apply correctly without administrator privileges.
+
+## Development
+
+This project was developed with the assistance of AI tools.
+
+All design decisions, testing and system-level behavior were manually verified
+and adjusted for real-world use.
