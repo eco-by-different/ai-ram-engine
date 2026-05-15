@@ -16,9 +16,21 @@ AI RAM Engine is a PowerShell-based system optimization tool designed to improve
 
 ---
 
+## Requirements
+
+- Windows 10 / 11
+- PowerShell
+- Administrator privileges (recommended)
+
 ## Usage
 
 Run PowerShell as Administrator:
 
 ```powershell
 .\ai-ram-engine.ps1
+```
+
+## Notes
+
+Some optimizations (e.g. process priority and power throttling)  
+may not apply correctly without administrator privileges.
