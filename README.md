@@ -1,3 +1,6 @@
+![Repo size](https://img.shields.io/github/repo-size/eco-by-different/ai-ram-engine)
+![Last commit](https://img.shields.io/github/last-commit/eco-by-different/ai-ram-engine)
+
 # AI RAM Engine
 
 Lightweight system optimization tool for managing CPU, memory and power efficiency.
