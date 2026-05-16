@@ -42,7 +42,7 @@ $exclude = [regex]"explorer"
 
 # --- GUI ---
 $form = New-Object Windows.Forms.Form
-$form.Text = "AI RAM Engine v4.6.2 (STABLE)"
+$form.Text = "AI RAM Engine v4.6.2"
 $form.Size = "320, 550"
 $form.Topmost = $true
 $form.StartPosition = "CenterScreen"
