@@ -1,5 +1,5 @@
 # =================================================================
-# AI RAM Engine - APEX OPTIMIZED (v4.6.1 - Thread Stats Update)
+# AI RAM Engine - APEX OPTIMIZED (v4.6.2 - Leak Fix Update)
 # =================================================================
 # 1. HIGH-PERFORMANCE API
 $apiCode = @"
@@ -52,7 +52,7 @@ $global:allowClose = $false
 
 # 3. GUI CONSTRUCTION
 $form = New-Object Windows.Forms.Form
-$form.Text = "AI RAM Engine v4.6.1"
+$form.Text = "AI RAM Engine v4.6.2"
 $form.Size = "320, 550"
 $form.Topmost = $true
 $form.StartPosition = "CenterScreen"
@@ -119,8 +119,8 @@ function Invoke-Engine {
  } catch { $lblRamStatus.Text = "?" }
  
  for ($i=0; $i -lt $list.Items.Count; $i++) {
- $name = $list.Items[$i].ToString()
- if ($list.GetItemChecked($i)) { [void]$global:vault.Add($name) } else { [void]$global:vault.Remove($name) }
+  $name = $list.Items[$i].ToString()
+  if ($list.GetItemChecked($i)) { [void]$global:vault.Add($name) } else { [void]$global:vault.Remove($name) }
  }
  
  $allProcs = Get-Process -ErrorAction SilentlyContinue
@@ -129,32 +129,39 @@ function Invoke-Engine {
  $totalThreads = 0
  
  foreach ($p in $allProcs) {
- if ($global:vault.Contains($p.ProcessName)) { 
- try { [WinAPI]::Optimize($p.Handle, $global:ecoMode) } catch {}
- $optimizedCount++
- $totalOptimizedRam += $p.WorkingSet64
- $totalThreads += $p.Threads.Count
- }
+  if ($global:vault.Contains($p.ProcessName)) { 
+   try { [WinAPI]::Optimize($p.Handle, $global:ecoMode) } catch {}
+   $optimizedCount++
+   $totalOptimizedRam += $p.WorkingSet64
+   # FIX: Čtení BasePriority/Threads přímo generuje interní objekty, které se dřív neodstraňovaly
+   try { $totalThreads += $p.Threads.Count } catch {}
+  }
  }
  $ramMb = [Math]::Round($totalOptimizedRam / 1MB, 0)
  $optStatsLabel.Text = "Optimized: $optimizedCount procs / $ramMb MB / $totalThreads thrs"
  
  $visibleProcs = $allProcs | Where-Object { 
- ($_.MainWindowHandle -ne 0 -or $_.ProcessName -match "WINWORD|EXCEL|OUTLOOK") -and 
- $_.Name -notmatch "explorer|taskmgr|pwsh|powershell" 
+  ($_.MainWindowHandle -ne 0 -or $_.ProcessName -match "WINWORD|EXCEL|OUTLOOK") -and 
+  $_.Name -notmatch "explorer|taskmgr|pwsh|powershell" 
  }
  
  $currentHash = ($visibleProcs.Name -join ",")
  if ($currentHash -ne $global:lastProcHash) {
- $global:lastProcHash = $currentHash
- $list.BeginUpdate()
- $list.Items.Clear()
- $visibleProcs.Name | Select-Object -Unique | Sort-Object | ForEach-Object {
- [void]$list.Items.Add($_, $global:vault.Contains($_))
+  $global:lastProcHash = $currentHash
+  $list.BeginUpdate()
+  $list.Items.Clear()
+  $visibleProcs.Name | Select-Object -Unique | Sort-Object | ForEach-Object {
+   [void]$list.Items.Add($_, $global:vault.Contains($_))
+  }
+  $list.EndUpdate()
  }
- $list.EndUpdate()
- }
- $allProcs | ForEach-Object { $_.Close() }
+ 
+ # DŮKLADNÉ VYČIŠTĚNÍ PROCESŮ
+ foreach ($p in $allProcs) { $p.Close(); $p.Dispose() }
+ 
+ # VYNUCENÍ UKLIZENÍ PAMĚTI .NET / POWERSHELLU
+ [System.GC]::Collect()
+ [System.GC]::WaitForPendingFinalizers()
 }
 
 # 5. TRAY & EVENTS
