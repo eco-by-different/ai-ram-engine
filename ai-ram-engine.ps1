@@ -1,5 +1,5 @@
 # =================================================================
-# AI RAM Engine - APEX OPTIMIZED (v4.6.2 - True Leak Fix FINAL)
+# AI RAM Engine - APEX OPTIMIZED (v4.6.2 - Stabilized No Growth)
 # =================================================================
 
 $apiCode = @"
@@ -42,7 +42,7 @@ $exclude = [regex]"explorer"
 
 # --- GUI ---
 $form = New-Object Windows.Forms.Form
-$form.Text = "AI RAM Engine v4.6.2"
+$form.Text = "AI RAM Engine v4.6.2 (STABLE)"
 $form.Size = "320, 550"
 $form.Topmost = $true
 $form.StartPosition = "CenterScreen"
@@ -59,7 +59,7 @@ $stats.Text = "Optimized: 0 procs / 0 MB / 0 thrs"
 $stats.Dock = "Bottom"
 $stats.Height = 30
 $stats.TextAlign = "MiddleCenter"
-$stats.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
+$stats.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $stats.ForeColor = [System.Drawing.Color]::DimGray
 $stats.BackColor = [System.Drawing.Color]::White
 
@@ -122,6 +122,11 @@ function Invoke-Engine {
         foreach ($n in ($vNames | Sort-Object)) { [void]$list.Items.Add($n, $global:vault.Contains($n)) }
         $list.EndUpdate()
     }
+
+    # BEZPEČNÝ FIX BOBTNÁNÍ: Jednou za minutu spláchneme metadata hromadící se v PowerShell engine
+    if ($global:tickCount % 10 -eq 0) {
+        [System.GC]::Collect()
+    }
 }
 
 $tray = New-Object Windows.Forms.NotifyIcon -Property @{Icon=[System.Drawing.SystemIcons]::Application; Visible=$true; Text="AI RAM Engine"}
@@ -138,7 +143,6 @@ $form.Add_FormClosing({
         $_.Cancel = $true; $form.Hide() 
     }
     else { 
-        # Úplné vypnutí -> bezpečné vrácení procesů do Full Speed stavu
         foreach ($p in [System.Diagnostics.Process]::GetProcesses()) {
             try {
                 if ($global:vault.Contains($p.ProcessName)) {
