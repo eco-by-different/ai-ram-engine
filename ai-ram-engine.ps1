@@ -1,6 +1,7 @@
 # =================================================================
-# AI RAM Engine - APEX OPTIMIZED (v4.6.2 - Leak Fix Update)
+# AI RAM Engine - APEX OPTIMIZED (v4.6.2 - True Leak Fix FINAL)
 # =================================================================
+
 # 1. HIGH-PERFORMANCE API
 $apiCode = @"
 using System;
@@ -11,34 +12,39 @@ public class WinAPI {
  [DllImport("kernel32.dll", EntryPoint = "SetProcessInformation")] public static extern bool SetProcessMemoryInformation(IntPtr h, int infoClass, ref long priority, uint size);
  [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+
  [StructLayout(LayoutKind.Sequential)]
  public struct PROCESS_POWER_THROTTLING_STATE {
- public uint Version;
- public uint ControlMask;
- public uint StateMask;
+  public uint Version;
+  public uint ControlMask;
+  public uint StateMask;
  }
+
  public static void Optimize(IntPtr h, bool eco) {
- if (h == IntPtr.Zero) return;
- try {
- SetPriorityClass(h, eco ? (uint)0x40 : (uint)0x20);
- long memPriority = eco ? 1 : 5;
- SetProcessMemoryInformation(h, 5, ref memPriority, (uint)sizeof(long));
- 
- PROCESS_POWER_THROTTLING_STATE throttlingState = new PROCESS_POWER_THROTTLING_STATE();
- throttlingState.Version = 1;
- throttlingState.ControlMask = 0x1 | 0x4; 
- throttlingState.StateMask = eco ? (uint)(0x1 | 0x4) : (uint)0x0;
- SetProcessInformation(h, 4, ref throttlingState, (uint)Marshal.SizeOf(throttlingState));
- } catch {}
+  if (h == IntPtr.Zero) return;
+  try {
+   SetPriorityClass(h, eco ? (uint)0x40 : (uint)0x20);
+
+   long memPriority = eco ? 1 : 5;
+   SetProcessMemoryInformation(h, 5, ref memPriority, (uint)sizeof(long));
+
+   PROCESS_POWER_THROTTLING_STATE t = new PROCESS_POWER_THROTTLING_STATE();
+   t.Version = 1;
+   t.ControlMask = 0x1 | 0x4;
+   t.StateMask = eco ? (uint)(0x1 | 0x4) : (uint)0x0;
+
+   SetProcessInformation(h, 4, ref t, (uint)Marshal.SizeOf(t));
+  } catch {}
  }
 }
 "@
-if (-not ([System.Management.Automation.PSTypeName]'WinAPI').Type) { 
- Add-Type -TypeDefinition $apiCode 
+if (-not ([System.Management.Automation.PSTypeName]'WinAPI').Type) {
+ Add-Type -TypeDefinition $apiCode
 }
 
 # 2. CORE SETUP
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
 $conf = "$PSScriptRoot\config.txt"
 $global:vault = New-Object System.Collections.Generic.HashSet[string]
 if (Test-Path $conf) { Get-Content $conf | ForEach-Object { [void]$global:vault.Add($_) } }
@@ -46,9 +52,11 @@ if (Test-Path $conf) { Get-Content $conf | ForEach-Object { [void]$global:vault.
 $global:colorEco = [System.Drawing.ColorTranslator]::FromHtml("#004000")
 $global:colorNormal = [System.Drawing.ColorTranslator]::FromHtml("#2F4F4F")
 $global:colorOff = [System.Drawing.Color]::Firebrick
+
 $global:ecoMode = $true
 $global:lastProcHash = ""
 $global:allowClose = $false
+$global:tickCount = 0
 
 # 3. GUI CONSTRUCTION
 $form = New-Object Windows.Forms.Form
@@ -99,86 +107,106 @@ $lblOptStatus.ForeColor = $global:colorEco
 $form.Controls.AddRange(@($list, $optStatsLabel, $toggleBtn, $strip))
 
 # 4. ENGINE LOGIC
+# ✅ BOD 4: Kompletní přepis na .NET GetProcesses() s korektním uvolňováním .Dispose()
 function Reset-AllProcesses {
-    Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($global:vault.Contains($_.ProcessName)) { 
-            try { [WinAPI]::Optimize($_.Handle, $false) } catch {}
+    $procs = [System.Diagnostics.Process]::GetProcesses()
+    foreach ($p in $procs) {
+        if ($global:vault.Contains($p.ProcessName)) {
+            try { [WinAPI]::Optimize($p.Handle, $false) } catch {}
         }
-        $_.Close()
+        try { $p.Dispose() } catch {}
     }
 }
 
 function Invoke-Engine {
+ # ✅ BOD 2: Přidáno počítadlo tiků pro omezení zátěže dotazů na vlákna
+ $global:tickCount++
+
  try {
- [WinAPI]::SetPriorityClass([System.Diagnostics.Process]::GetCurrentProcess().Handle, 0x40)
+  [WinAPI]::SetPriorityClass([System.Diagnostics.Process]::GetCurrentProcess().Handle, 0x40)
  } catch {}
+
  try {
- $mm = Get-MMAgent
- $lblRamStatus.Text = if ($mm.MemoryCompression) { "ON" } else { "OFF" }
- $lblRamStatus.ForeColor = if ($mm.MemoryCompression) { $global:colorEco } else { $global:colorOff }
+  $mm = Get-MMAgent
+  $lblRamStatus.Text = if ($mm.MemoryCompression) { "ON" } else { "OFF" }
+  $lblRamStatus.ForeColor = if ($mm.MemoryCompression) { $global:colorEco } else { $global:colorOff }
  } catch { $lblRamStatus.Text = "?" }
- 
+
+ # Synchronizace vaultu (CheckedListBox -> Text)
  for ($i=0; $i -lt $list.Items.Count; $i++) {
   $name = $list.Items[$i].ToString()
   if ($list.GetItemChecked($i)) { [void]$global:vault.Add($name) } else { [void]$global:vault.Remove($name) }
  }
- 
- $allProcs = Get-Process -ErrorAction SilentlyContinue
+
+ # ✅ BOD 4: Nahrazeno ultra-rychlým .NET voláním namísto těžkopádného Get-Process
+ $allProcs = [System.Diagnostics.Process]::GetProcesses()
+
  $optimizedCount = 0
  $totalOptimizedRam = 0
  $totalThreads = 0
- 
+
  foreach ($p in $allProcs) {
-  if ($global:vault.Contains($p.ProcessName)) { 
+  if ($global:vault.Contains($p.ProcessName)) {
+
    try { [WinAPI]::Optimize($p.Handle, $global:ecoMode) } catch {}
+
    $optimizedCount++
    $totalOptimizedRam += $p.WorkingSet64
-   # FIX: Čtení BasePriority/Threads přímo generuje interní objekty, které se dřív neodstraňovaly
-   try { $totalThreads += $p.Threads.Count } catch {}
+
+   # ✅ BOD 2: Threads se zjišťují pouze každé 3. tiknutí (dramatické snížení GC tlaku)
+   if ($global:tickCount % 3 -eq 0) {
+    try { $totalThreads += $p.Threads.Count } catch {}
+   }
   }
  }
- $ramMb = [Math]::Round($totalOptimizedRam / 1MB, 0)
+
+ $ramMb = [math]::Round($totalOptimizedRam / 1MB, 0)
  $optStatsLabel.Text = "Optimized: $optimizedCount procs / $ramMb MB / $totalThreads thrs"
- 
- $visibleProcs = $allProcs | Where-Object { 
-  ($_.MainWindowHandle -ne 0 -or $_.ProcessName -match "WINWORD|EXCEL|OUTLOOK") -and 
-  $_.Name -notmatch "explorer|taskmgr|pwsh|powershell" 
+
+ $visibleProcs = $allProcs | Where-Object {
+  ($_.MainWindowHandle -ne 0 -or $_.ProcessName -match "WINWORD|EXCEL|OUTLOOK") -and
+  $_.ProcessName -notmatch "explorer|taskmgr|pwsh|powershell"
  }
- 
- $currentHash = ($visibleProcs.Name -join ",")
+
+ # ✅ BOD 3: Stabilní a unikátní hash zabraňující zbytečnému překreslování GUI
+ $currentHash = ($visibleProcs.ProcessName | Sort-Object -Unique) -join ","
+
  if ($currentHash -ne $global:lastProcHash) {
   $global:lastProcHash = $currentHash
+
   $list.BeginUpdate()
   $list.Items.Clear()
-  $visibleProcs.Name | Select-Object -Unique | Sort-Object | ForEach-Object {
+
+  $visibleProcs.ProcessName | Select-Object -Unique | Sort-Object | ForEach-Object {
    [void]$list.Items.Add($_, $global:vault.Contains($_))
   }
+
   $list.EndUpdate()
  }
- 
- # DŮKLADNÉ VYČIŠTĚNÍ PROCESŮ
- foreach ($p in $allProcs) { $p.Close(); $p.Dispose() }
- 
- # VYNUCENÍ UKLIZENÍ PAMĚTI .NET / POWERSHELLU
- [System.GC]::Collect()
- [System.GC]::WaitForPendingFinalizers()
+
+ # ✅ BOD 4: Důsledné uvolňování handle objektů procesů
+ foreach ($p in $allProcs) { try { $p.Dispose() } catch {} }
+
+ # ✅ BOD 1: ODSTRANĚNO RUČNÍ VOLÁNÍ GC (paměť si teď bezpečně a optimálně řídí OS sám)
 }
 
 # 5. TRAY & EVENTS
 $tray = New-Object Windows.Forms.NotifyIcon -Property @{ Icon=[System.Drawing.SystemIcons]::Application; Visible=$true; Text="AI RAM Engine" }
+
 $menu = New-Object Windows.Forms.ContextMenuStrip
 [void]$menu.Items.Add("Open", $null, { $form.Show(); $form.WindowState = 0; $form.Activate() })
-[void]$menu.Items.Add("Exit", $null, { 
+[void]$menu.Items.Add("Exit", $null, {
     $global:allowClose = $true
-    $form.Close() 
+    $form.Close()
 })
+
 $tray.ContextMenuStrip = $menu
 $tray.Add_MouseDoubleClick({ $form.Show(); $form.WindowState = 0; $form.Activate() })
 
-$form.Add_FormClosing({ 
-    if (-not $global:allowClose -and $_.CloseReason -eq "UserClosing" -and $tray.Visible) { 
-        $_.Cancel = $true; 
-        $form.Hide() 
+$form.Add_FormClosing({
+    if (-not $global:allowClose -and $_.CloseReason -eq "UserClosing" -and $tray.Visible) {
+        $_.Cancel = $true
+        $form.Hide()
         $global:vault | Out-File $conf -Force
     } else {
         $global:vault | Out-File $conf -Force
@@ -190,7 +218,7 @@ $form.Add_FormClosing({
 $toggleBtn.Add_Click({
  $global:ecoMode = -not $global:ecoMode
  $toggleBtn.Text = if ($global:ecoMode) { "MODE: ECO (Active)" } else { "MODE: NORMAL (Full Speed)" }
- $toggleBtn.BackColor = if ($global:ecoMode) { $global:colorEco } else { $global:colorNormal } 
+ $toggleBtn.BackColor = if ($global:ecoMode) { $global:colorEco } else { $global:colorNormal }
  Invoke-Engine
 })
 
@@ -203,6 +231,10 @@ $toggleBtn.Add_Click({
 $timer = New-Object Windows.Forms.Timer -Property @{ Interval = 5000 }
 $timer.Add_Tick({ Invoke-Engine })
 $timer.Start()
+
 Invoke-Engine
-$h = [WinAPI]::GetConsoleWindow(); if ($h -ne 0) { [WinAPI]::ShowWindow($h, 0) }
+
+$h = [WinAPI]::GetConsoleWindow()
+if ($h -ne 0) { [WinAPI]::ShowWindow($h, 0) }
+
 [Windows.Forms.Application]::Run($form)
