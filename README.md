@@ -44,3 +44,9 @@ This project was developed with the assistance of AI tools.
 
 All design decisions, testing and system-level behavior were manually verified
 and adjusted for real-world use.
+
+## Recent Updates
+
+- **Enhanced Performance**: Optimized core engine logic for better RAM and CPU resource allocation.
+- **Memory Efficiency**: Improved dynamic memory management under heavy workloads like video encoding.
+- **Stability**: Refined code structure to prevent crashes and ensure smoother script execution.
