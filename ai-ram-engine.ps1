@@ -3,7 +3,7 @@
 # Compact Efficiency Mode Manager
 # config.txt stays next to PS1/EXE
 # + CPU LIMIT button
-#   ON  = Min CPU 5 %, Max CPU 50 %
+#   ON  = Min CPU 5 %, Max CPU 66 %
 #   OFF = Restore original CPU power values
 # =================================================================
 
@@ -161,7 +161,7 @@ $global:lastMemComp = $null
 
 # --- CPU LIMIT CONFIG ---
 $cpuMinPercent = 5
-$cpuMaxPercent = 50
+$cpuMaxPercent = 66
 
 # Processor power management GUIDs
 $cpuSubGuid = "54533251-82be-4824-96c1-47b60b740d00"
@@ -493,7 +493,7 @@ function Set-CpuUi {
 
     switch ($State) {
         "On" {
-            $cpuBtn.Text = "CPU LIMIT: ON (5-50%)"
+            $cpuBtn.Text = "CPU LIMIT: ON (5-66%)"
             $cpuBtn.BackColor = $cEco
         }
         "Failed" {
